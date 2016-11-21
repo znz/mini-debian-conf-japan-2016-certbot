@@ -160,13 +160,20 @@ ExecStart=/usr/bin/certbot -q renew
 
 * パッケージのバージョンアップなどで対処されたら忘れずに削除すること
 
-# 証明書更新の反映
+# 証明書更新の反映 (1/2)
 
-* `post-hook` を使う
+* `renew-hook` を使う
+  * 更新成功時のみ呼ばれる
+* `post-hook` でも良い
+  * 更新試行後に呼ばれる
+  * `post-hook` は `pre-hook` と組み合わせて `standalone` プラグインの時に Web サーバーを止めるのに向いている
+
+# 証明書更新の反映 (2/2)
+
 * `/etc/letsencrypt/cli.ini` を以下の内容で作成
 
 ```
-post-hook = apachectl graceful
+renew-hook = apachectl graceful
 ```
 
 * nginx なら `service nginx reload`
@@ -233,7 +240,7 @@ moreutils を入れて `/etc/systemd/system/certbot.service.d/diffmail.conf` を
 # メールサーバーの例
 
 * Web を用意できるなら webroot で更新
-* メールサーバーに証明書を設定して post-hook で reload
+* メールサーバーに証明書を設定して renew-hook で reload
 
 # 単独 Web サーバーではない環境例 (1/3)
 
