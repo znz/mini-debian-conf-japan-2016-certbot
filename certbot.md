@@ -216,8 +216,6 @@ certbot certonly --test-cert --webroot \
 rsa-key-size = 4096
 ```
 
-(更新確認待ち)
-
 # 更新時の通知設定例
 
 moreutils を入れて `/etc/systemd/system/certbot.service.d/diffmail.conf` を以下の内容で作成
