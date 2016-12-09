@@ -12,6 +12,12 @@ date
 allotted-time
 :   30m
 
+# 自己紹介
+
+* 西山和広
+* id:znz (github, twitter など)
+* Ruby コミッター
+
 # Certbot とは?
 
 * https://certbot.eff.org/
@@ -26,13 +32,13 @@ allotted-time
 
 # 何ができる?
 
-* 無料で使える
-* DV 証明書
-* 自動発行できる
+* 無料で使える (商用利用も可能)
+* DV (ドメイン認証) 証明書
+* 自動発行できる (ACME プロトコル)
 
 # 何ができない?
 
-* EV SSL は無理
+* EV SSL は無理 (アドレスバーが緑になるもの)
 * 証明書に入るのはドメインのみ (組織名などは入らない)
 * ワイルドカードも無理
 
@@ -104,19 +110,32 @@ sudo certbot certonly --webroot \
 
 * `$DocumentRoot/.well-known/acme-challenge/ファイル名` が外部からちゃんとアクセスできるか確認
 
-# 証明書の設定
+# apache に証明書の設定
 
-apache なら
+2.4.8 以降なら (jessie はこっち)
 
 ```
 SSLCertificateKeyFile /etc/letsencrypt/live/www.example.org/privkey.pem
 SSLCertificateFile /etc/letsencrypt/live/www.example.org/fullchain.pem
 ```
 
+2.4.7 以前なら
+
+```
+SSLCertificateFile /etc/letsencrypt/live/www.example.org/cert.pem
+SSLCertificateKeyFile /etc/letsencrypt/live/www.example.org/privkey.pem
+SSLCertificateChainFile /etc/letsencrypt/live/www.example.org/chain.pem
+```
+
 # 証明書のパス
 
 * (たぶん) 互換性のため `certbot` に名前が変わっても `/etc/letsencrypt` のままでした
 * `/etc/letsencrypt/live` 以下に `/etc/letsencrypt/archive` 以下へのシンボリックリンク
+* 更新するごとに `archive` に連番で証明書や鍵などが溜まっていく
+
+# ログのパス
+
+* `/var/log/letsencrypt/letsencrypt.log*` にログがある
 
 # 証明書の発行 (2個目以降)
 
@@ -143,11 +162,11 @@ SSLCertificateFile /etc/letsencrypt/live/www.example.org/fullchain.pem
 
 # サーバーに更新リクエストが集中する可能性あり
 
-* パッケージが悪いということで何もしない
+* パッケージが悪いということで何もしない?
 * 更新がある時だけ、と頻度も低いのでそんなに大きな問題にはならない?
-* 設定で対処
+* 設定で対処?
 
-# 遅延設定 (非推奨)
+# 遅延設定例
 
 `/etc/systemd/system/certbot.service.d/delay.conf` を以下の内容で作成
 
@@ -160,7 +179,7 @@ ExecStart=/usr/bin/certbot -q renew
 
 * パッケージのバージョンアップなどで対処されたら忘れずに削除すること
 
-# 証明書更新の反映 (1/2)
+# 証明書更新の反映 (1/5)
 
 * `renew-hook` を使う
   * 更新成功時のみ呼ばれる
@@ -168,7 +187,12 @@ ExecStart=/usr/bin/certbot -q renew
   * 更新試行後に呼ばれる
   * `post-hook` は `pre-hook` と組み合わせて `standalone` プラグインの時に Web サーバーを止めるのに向いている
 
-# 証明書更新の反映 (2/2)
+# 証明書更新の反映 (2/5)
+
+* `renew-hook` は初回の証明書作成時には呼ばれなかった
+* 初回も呼んでほしいなら `post-hook` の方が良いかもしれない
+
+# 証明書更新の反映 (3/5)
 
 * `/etc/letsencrypt/cli.ini` を以下の内容で作成
 
@@ -178,10 +202,34 @@ renew-hook = apachectl graceful
 
 * nginx なら `service nginx reload`
 
+# 証明書更新の反映 (4/5)
+
+* ドメインに応じて Web サーバー以外のデーモンを再起動するスクリプトを作ってフルパスで指定するのもあり
+
+```
+renew-hook = /etc/letsencrypt/renew-hook
+```
+
+# 証明書更新の反映 (5/5)
+
+/etc/letsencrypt/renew-hook
+
+```
+apachectl graceful
+for domain in $RENEWED_DOMAINS; do
+  case "$domain" in
+    mx*)
+      service postfix reload >/dev/null
+      service dovecot reload
+      ;;
+  esac
+done
+```
+
 # 基本的な使い方のまとめ
 
 * certbot webroot プラグインで既存の Web サーバーの設定を全くいじらずに証明書発行が可能
-* ダウンタイムも発生しない
+* standalone プラグインと違って、ダウンタイムも発生しない
 
 # 様々なトピック
 
@@ -216,6 +264,8 @@ certbot certonly --test-cert --webroot \
 rsa-key-size = 4096
 ```
 
+(デフォルトは 2048)
+
 # 更新時の通知設定例
 
 moreutils を入れて `/etc/systemd/system/certbot.service.d/diffmail.conf` を以下の内容で作成
@@ -240,23 +290,28 @@ moreutils を入れて `/etc/systemd/system/certbot.service.d/diffmail.conf` を
 * Web を用意できるなら webroot で更新
 * メールサーバーに証明書を設定して renew-hook で reload
 
-# 単独 Web サーバーではない環境例 (1/3)
+# 単独 Web サーバーではない環境例 (1/4)
 
 * ロードバランサーで `$DocumentRoot/.well-known/acme-challenge` を `certbot` 実行サーバーに固定
 * やったことないので詳しいことは不明
 
-# 単独 Web サーバーではない環境例 (2/3)
+# 単独 Web サーバーではない環境例 (2/4)
 
 * DNS で認証したい
-* `certbot` は向かない
-* dehydrated (旧 letsencrypt.sh)
-* Debian には letsencrypt.sh パッケージがある (確認時点で 0.2.0-4)
+* ACME プロトコルには DNS による認証もある
+* `certbot` は向かない (途中で止まって手動で DNS 設定するようになっているようだった)
 
-# 単独 Web サーバーではない環境例 (3/3)
+# 単独 Web サーバーではない環境例 (3/4)
+
+* dehydrated (旧 letsencrypt.sh)
+* Debian には letsencrypt.sh パッケージがある (2016-12-09 現在 0.3.0-1)
+* sid には dehydrated パッケージがある (2016-12-09 現在 0.3.1-1)
+
+# 単独 Web サーバーではない環境例 (4/4)
 
 * https://github.com/lukas2511/dehydrated (旧 letsencrypt.sh)
 * Wiki に `nsupdate` で Bind と連携する例などがある
-* 他の API 対応 DNS サーバーでもできるはず
+* 他の API 対応 DNS サーバーの例もある
 
 # 試してないけどメールアドレス変更
 
@@ -289,3 +344,10 @@ certbot register --update-registration --email EMAIL
 # letsencrypt パッケージ時代に入れた環境からの移行 (2/2)
 
 * そのまま purge すると `/etc/letsencrypt` `/var/log/letsencrypt` が消されてしまうので、`sudoedit /var/lib/dpkg/info/letsencrypt.postrm` でコメントアウトしてから purge すると良い
+
+# まとめ
+
+* certbot で無料で SSL/TLS サーバー証明書
+* 自動更新で運用の手間いらず
+* メールサーバーなど Web 以外でも使える
+* 複数サーバー環境などでは dehydrated など他のクライアントの方が良いかも
